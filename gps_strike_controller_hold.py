@@ -23,6 +23,10 @@ from haversine import Unit
 import math
 import socket
 import json
+import threading
+import sys
+import termios
+import tty
 
 from rclpy.qos import (
     QoSProfile,
@@ -261,12 +265,18 @@ class GPSStrikeController(Node):
         self.target_passed = False
         self.prev_distance_rate = None
         self.offboard_disabled = False
+        self.manual_hold_requested = False
 
         self.get_logger().warn('SIGN CHANGE VERSION LOADED')
 
         # ==================================================
         # LOG
         # ==================================================
+
+        threading.Thread(
+            target=self.keyboard_monitor,
+            daemon=True
+        ).start()
 
         self.get_logger().info(
 
@@ -609,6 +619,50 @@ class GPSStrikeController(Node):
 
         self.pub.publish(msg)
 
+
+    # ==========================================================
+    # KEYBOARD MONITOR
+    # ==========================================================
+
+    def keyboard_monitor(self):
+
+        try:
+
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+
+            while rclpy.ok():
+
+                tty.setcbreak(fd)
+
+                ch = sys.stdin.read(1)
+
+                if ch.lower() == 'h':
+
+                    self.manual_hold_requested = True
+
+                    self.get_logger().warn(
+                        "h PRESSED -> HOLD REQUESTED"
+                    )
+
+        except Exception as e:
+
+            self.get_logger().error(
+                f"Keyboard monitor error: {e}"
+            )
+
+        finally:
+
+            try:
+                termios.tcsetattr(
+                    fd,
+                    termios.TCSADRAIN,
+                    old_settings
+                )
+            except:
+                pass
+
+
     # ==========================================================
     # MAIN LOOP
     # ==========================================================
@@ -655,6 +709,25 @@ class GPSStrikeController(Node):
 
             0.6
         )
+
+        # ======================================================
+        # MANUAL HOLD (D KEY)
+        # ======================================================
+
+        if self.manual_hold_requested:
+
+            self.target_passed = True
+            self.offboard_disabled = True
+
+            req = SetMode.Request()
+            req.custom_mode = "AUTO.LOITER"
+            self.mode_client.call_async(req)
+
+            self.get_logger().warn(
+                "MANUAL HOLD ACTIVATED"
+            )
+
+            return
 
         # ======================================================
         # TARGET PASSED

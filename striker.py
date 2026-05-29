@@ -12,8 +12,8 @@ from stream_viewer import stream_viewer
 # HARDCODED TARGET
 # ======================================================
 
-TARGET_LAT = 40.5882799973
-TARGET_LON = -79.88890028672488
+TARGET_LAT = 40.58738020
+TARGET_LON = -79.8909983
 TARGET_ALT = 750.0
 
 
