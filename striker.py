@@ -1,111 +1,80 @@
 import rclpy
-import threading
-import time
 
-from gps_strike_controller import GPSStrikeController
+from rclpy.executors import MultiThreadedExecutor
 
+from gps_strike_controller_hold import GPSStrikeController
 
-# ==========================================================
-# TARGET PROVIDER
-# ==========================================================
-
-# Replace this with:
-# - socket input
-# - vision tracking
-# - another ROS topic
-# - API
-# - telemetry feed
-#
-# This function should ALWAYS return
-# latest target lat/lon
-
-def get_latest_target():
-
-    # EXAMPLE:
-    # moving target
-
-    base_lat = 40.59190553758221
-    base_lon = -79.8862427481675
-
-    t = time.time()
-
-    moving_lat = base_lat + (0.00001 * (t % 20))
-    moving_lon = base_lon + (0.00001 * (t % 20))
-
-    return moving_lat, moving_lon
+# IMPORT STREAM VIEWER
+from stream_viewer import stream_viewer
 
 
-# ==========================================================
-# MAIN
-# ==========================================================
+# ======================================================
+# HARDCODED TARGET
+# ======================================================
+
+TARGET_LAT = 40.5882799973
+TARGET_LON = -79.88890028672488
+TARGET_ALT = 750.0
+
 
 def main():
 
     rclpy.init()
 
     # ======================================================
-    # INITIAL TARGET
+    # STRIKE CONTROLLER
     # ======================================================
-
-    initial_lat, initial_lon = get_latest_target()
 
     controller = GPSStrikeController(
 
-        target_lat=initial_lat,
-        target_lon=initial_lon,
+        target_lat=TARGET_LAT,
 
-        target_relative_alt=750.0
+        target_lon=TARGET_LON,
+
+        target_relative_alt=TARGET_ALT
     )
 
     # ======================================================
-    # ROS SPIN THREAD
+    # CAMERA VIEWER NODE
     # ======================================================
 
-    spin_thread = threading.Thread(
-
-        target=rclpy.spin,
-        args=(controller,),
-        daemon=True
-    )
-
-    spin_thread.start()
+    # viewer = stream_viewer(
+    #     topic_name='/rgb_compressed',
+    #     window_name='RGB Camera',
+    #     width=640,
+    #     height=480
+    # )
 
     # ======================================================
-    # TARGET UPDATE LOOP
+    # EXECUTOR
+    # ======================================================
+
+    executor = MultiThreadedExecutor()
+
+    executor.add_node(controller)
+
+    # executor.add_node(viewer)
+
+    # ======================================================
+    # SPIN
     # ======================================================
 
     try:
 
-        while rclpy.ok():
-
-            target_lat, target_lon = get_latest_target()
-
-            controller.set_target(
-                target_lat,
-                target_lon
-            )
-
-            controller.get_logger().info(
-
-                f"Updated Target -> "
-                f"{target_lat}, {target_lon}"
-            )
-
-            # update rate
-            time.sleep(0.1)
+        executor.spin()
 
     except KeyboardInterrupt:
 
-        pass
+        print("\nShutting down...")
 
-    controller.destroy_node()
+    finally:
 
-    rclpy.shutdown()
+        controller.destroy_node()
 
+        # viewer.destroy_node()
 
-# ==========================================================
-# ENTRY
-# ==========================================================
+        rclpy.shutdown()
+
 
 if __name__ == '__main__':
 

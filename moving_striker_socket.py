@@ -3,8 +3,7 @@ import rclpy
 
 from rclpy.executors import MultiThreadedExecutor
 
-from gps_strike_controller_hold import GPSStrikeController
-# from gps_strike_controller import GPSStrikeController
+from gps_strike_controller import GPSStrikeController
 from target_gps_converter import CubeGPSConverter
 
 # IMPORT STREAM VIEWER
@@ -23,11 +22,17 @@ def main():
 
     controller = GPSStrikeController(
 
-        target_lat=0.0,
-        target_lon=0.0,
+    target_lat=0.0,
+    target_lon=0.0,
 
-        target_relative_alt=0.0
-    )
+    target_relative_alt=0.0,
+
+    socket_enabled=True,
+
+    socket_ip='0.0.0.0',
+
+    socket_port=5000
+)
 
     # # ======================================================
     # # CAMERA VIEWER NODE

@@ -256,6 +256,14 @@ class GPSStrikeController(Node):
 
         self.absolute_target_alt = None
 
+        self.prev_distance = None
+        self.prev_distance_time = None
+        self.target_passed = False
+        self.prev_distance_rate = None
+        self.offboard_disabled = False
+
+        self.get_logger().warn('SIGN CHANGE VERSION LOADED')
+
         # ==================================================
         # LOG
         # ==================================================
@@ -645,14 +653,29 @@ class GPSStrikeController(Node):
 
             self.current_yaw,
 
-            1.0
+            0.6
         )
+
+        # ======================================================
+        # TARGET PASSED
+        # ======================================================
+
+        if self.target_passed:
+
+            self.get_logger().warn(
+                "TARGET PASSED - HOLDING"
+            )
+
+            return
 
         # ======================================================
         # OFFBOARD
         # ======================================================
 
-        if self.current_state.mode != "OFFBOARD":
+        if (
+            not self.offboard_disabled
+            and self.current_state.mode != "OFFBOARD"
+        ):
 
             req = SetMode.Request()
 
@@ -779,25 +802,54 @@ class GPSStrikeController(Node):
         )
 
         # ======================================================
-        # TARGET HIT
+        # DISTANCE DERIVATIVE / PASS DETECTION
         # ======================================================
 
-        if horizontal_distance < 5.0:
+        current_time = self.get_clock().now().nanoseconds * 1e-9
 
-            self.get_logger().info(
-                "TARGET HIT"
+        distance_rate = 0.0
+
+        if self.prev_distance is not None:
+
+            dt = current_time - self.prev_distance_time
+
+            if dt > 0.0:
+
+                distance_rate = (
+                    horizontal_distance -
+                    self.prev_distance
+                ) / dt
+
+        self.get_logger().warn(
+            f"D={horizontal_distance:.1f} Rate={distance_rate:.1f}"
+        )
+
+        if (
+            not self.target_passed
+            and horizontal_distance < 150.0
+            and self.prev_distance_rate is not None
+            and self.prev_distance_rate < 0.0
+            and distance_rate > 0.0
+        ):
+
+            self.target_passed = True
+            self.offboard_disabled = True
+
+            self.get_logger().warn(
+                f"TARGET PASSED! "
+                f"{self.prev_distance_rate:.1f} -> "
+                f"{distance_rate:.1f}"
             )
 
-            self.send_attitude(
-
-                0.0,
-
-                self.current_yaw,
-
-                0.0
-            )
+            req = SetMode.Request()
+            req.custom_mode = "AUTO.LOITER"
+            self.mode_client.call_async(req)
 
             return
+
+        self.prev_distance = horizontal_distance
+        self.prev_distance_time = current_time
+        self.prev_distance_rate = distance_rate
 
         # # ======================================================
         # # TRUE GPS BEARING
