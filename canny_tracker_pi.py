@@ -9,8 +9,8 @@ gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst
 
 import sys
-sys.path.append('../')
-sys.path.append('/home/paar-core0/python_tracker/tools/python_tracking/')
+# sys.path.append('../')
+# sys.path.append('/home/paar-core0/python_tracker/tools/python_tracking/')
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -18,19 +18,20 @@ from rclpy.qos import qos_profile_sensor_data
 
 from sensor_msgs.msg import CompressedImage, Imu
 from std_msgs.msg import Float32MultiArray
-from mavros_msgs.msg import AttitudeTarget
-from vse_msgs.msg import SOTResult   # /VSE/tracker_result message type
+from mavros_msgs.msg import AttitudeTarget, State
+from mavros_msgs.srv import CommandBool, SetMode
+from vs_engine_interfaces.msg import SOTResult   # /VSE/tracker_result message type
 
-from jetson_pysot_tracker import (
-    run_pysot_tracker,
-    push_frame,
-)
+# from jetson_pysot_tracker import (
+#     run_pysot_tracker,
+#     push_frame,
+# )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tuning constants
 # ─────────────────────────────────────────────────────────────────────────────
-HOVER_THRUST = 0.0   # neutral hold thrust (tune per platform)
-TRACK_THRUST = 0.0   # thrust while actively tracking
+HOVER_THRUST = 0.1   # neutral hold thrust (tune per platform)
+TRACK_THRUST = 0.1   # thrust while actively tracking
 
 
 def quaternion_from_euler(roll_rad, pitch_rad, yaw_rad):
@@ -123,6 +124,12 @@ class AutoCannyTracker(Node):
     def __init__(self):
         super().__init__("auto_canny_tracker")
 
+        self.counter = 0
+        self.offboard_requested = False
+        self.arm_requested = False
+        self.current_state = State()
+
+
         # ── image / tracker state ─────────────────────────────────────────────
         self.current_image       = None
         self.width               = 0
@@ -140,8 +147,8 @@ class AutoCannyTracker(Node):
         self.angle_error_y_deg = 0.0
 
         # Camera FOV
-        self.hfov = 90.0
-        self.vfov = 58.1
+        self.hfov = 42.0
+        self.vfov =23.0 
 
         # Latest data from /VSE/tracker_result
         self.latest_tracker_data = {
@@ -182,10 +189,17 @@ class AutoCannyTracker(Node):
         )
         self.track_coords_msg = Float32MultiArray()
 
+        self.arm_client = self.create_client(CommandBool, '/mavros/cmd/arming')
+        self.mode_client = self.create_client(SetMode, '/mavros/set_mode')
+
+        self.arm_client.wait_for_service()
+        self.mode_client.wait_for_service()
+
+
         # ── ROS subscriptions ─────────────────────────────────────────────────
         self.create_subscription(
             CompressedImage,
-            "/rgb_compressed",
+            "/VSE/vse_frames/compressed",
             self.listener_callback,
             qos_profile_sensor_data,
         )
@@ -195,6 +209,13 @@ class AutoCannyTracker(Node):
             self.imu_callback,
             qos_profile_sensor_data,
         )
+        self.create_subscription(
+            State,
+            "/mavros/state",
+            self.state_cb,
+            10,
+        )
+
         self.tracking_sub = self.create_subscription(
             SOTResult,
             "/VSE/tracker_result",
@@ -206,7 +227,8 @@ class AutoCannyTracker(Node):
         # Publishes a neutral attitude hold at 10 Hz.  The FCU requires a
         # continuous setpoint stream to stay in OFFBOARD mode; once the tracker
         # fires, tracking_status_callback overwrites this with rate commands.
-        self.create_timer(0.1, self.heartbeat_cb)
+        # self.create_timer(0.1, self.heartbeat_cb)
+        self.create_timer(0.05, self.offboard_manager_cb)
 
         # ── Send load-model sentinel immediately ──────────────────────────────
         # Use a one-shot timer so the publisher has time to be discovered before
@@ -226,6 +248,34 @@ class AutoCannyTracker(Node):
         self.publish_track_coords(-20.0, -20.0, -20.0, -20.0)
         self.model_ready = True
         self.get_logger().info("[INIT] Load-model sentinel sent on /track_coords.")
+
+
+    def state_cb(self, msg):
+        self.current_state = msg
+
+    def offboard_manager_cb(self):
+
+        # continuously stream setpoints first
+        if self.counter < 50:
+            self.counter += 1
+            return
+
+        if self.current_state.mode != "OFFBOARD" and not self.offboard_requested:
+            req = SetMode.Request()
+            req.custom_mode = "OFFBOARD"
+            self.mode_client.call_async(req)
+            self.offboard_requested = True
+            self.get_logger().warn("REQUESTED OFFBOARD")
+            return
+
+        if not self.current_state.armed and not self.arm_requested:
+            req = CommandBool.Request()
+            req.value = True
+            self.arm_client.call_async(req)
+            self.arm_requested = True
+            self.get_logger().warn("REQUESTED ARM")
+            return
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # Heartbeat — keeps OFFBOARD stream alive
@@ -441,7 +491,7 @@ class AutoCannyTracker(Node):
             self.height = self.current_image.shape[0]
             self.width  = self.current_image.shape[1]
 
-            push_frame(self.current_image)
+            
 
             # Once the model sentinel has been sent, init the tracker on the
             # first Canny detection by publishing the contour bbox.
@@ -482,11 +532,11 @@ def main2(args=None):
 
 
 if __name__ == "__main__":
-    tracker_thread = threading.Thread(target=run_pysot_tracker, daemon=True)
-    tracker_thread.start()
+    # tracker_thread = threading.Thread(target=run_pysot_tracker, daemon=True)
+    # tracker_thread.start()
 
     main_thread = threading.Thread(target=main2, daemon=True)
     main_thread.start()
 
-    tracker_thread.join()
+    # tracker_thread.join()
     main_thread.join()
