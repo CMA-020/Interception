@@ -2,8 +2,8 @@ import rclpy
 
 from rclpy.executors import MultiThreadedExecutor
 
-from gps_strike_controller_hold import GPSStrikeController
-
+# from gps_strike_controller_hold import GPSStrikeController
+from gps_tracker_controller_og import GPSStrikeController
 # IMPORT STREAM VIEWER
 from stream_viewer import stream_viewer
 
@@ -12,8 +12,9 @@ from stream_viewer import stream_viewer
 # HARDCODED TARGET
 # ======================================================
 
-TARGET_LAT = 40.58828020
-TARGET_LON = -79.88890059
+
+TARGET_LAT = 40.56938018
+TARGET_LON = -79.87440573
 TARGET_ALT = 750.0
 
 

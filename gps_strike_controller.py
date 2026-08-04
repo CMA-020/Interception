@@ -1030,14 +1030,14 @@ class GPSStrikeController(Node):
             # FINAL APPROACH
             # ==================================================
 
-            if (
+            # if (
 
-                height_remaining > 0.0 and
+            #     height_remaining > 0.0 and
 
-                height_remaining < 300.0
-            ):
+            #     height_remaining < 300.0
+            # ):
 
-                pitch_deg *= 0.2
+            #     pitch_deg *= 0.2
 
             thrust = 1.0
 

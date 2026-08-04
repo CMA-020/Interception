@@ -92,20 +92,20 @@ class TailsitterLiftTest(Node):
         self.phase = PHASE_CLIMB
 
         # Target altitude before transitioning to cruise
-        self.climb_target_m = 200.0    # metres
+        self.climb_target_m = 100.0    # metres
 
         # ==================================================
         # PHASE PARAMETERS
         # ==================================================
 
         #  CLIMB  – wings level, straight up
-        self.climb_thrust   = 0.8
+        self.climb_thrust   = 0.6
         self.climb_pitch    = 0.0      # degrees  (flat / vertical for tailsitter)
         self.climb_roll     = 0.0
 
         #  CRUISE – nose pitched 45 deg forward, more thrust
         self.cruise_thrust  = 0.8
-        self.cruise_pitch   = 50.0    # degrees  (negative = nose down / forward)
+        self.cruise_pitch   = 80.0    # degrees  (negative = nose down / forward)
         self.cruise_roll    = 0.0
 
         # ==================================================

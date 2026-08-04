@@ -37,7 +37,11 @@ from rclpy.qos import (
 # ==========================================================
 # GLOBAL CONFIGURATION
 # ==========================================================
+<<<<<<< Updated upstream
 DEFAULT_THRUST = 0.25
+=======
+DEFAULT_THRUST = 1.0
+>>>>>>> Stashed changes
 PRESTREAM_COUNT = 50  # 50 loops at 0.05s = 2.5 seconds of pre-streaming
 
 # ==========================================================
