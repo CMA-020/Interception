@@ -37,11 +37,7 @@ from rclpy.qos import (
 # ==========================================================
 # GLOBAL CONFIGURATION
 # ==========================================================
-<<<<<<< Updated upstream
-DEFAULT_THRUST = 0.25
-=======
-DEFAULT_THRUST = 1.0
->>>>>>> Stashed changes
+DEFAULT_THRUST = 1.0  # Default thrust value for attitude control
 PRESTREAM_COUNT = 50  # 50 loops at 0.05s = 2.5 seconds of pre-streaming
 
 # ==========================================================
@@ -144,6 +140,7 @@ class GPSStrikeController(Node):
         # FLIGHT STATE
         # ==================================================
         self.takeoff_complete = False
+        self.attack_started = False
         self.prestream_counter = 0
         self.loop_tick = 0  # Dedicated counter for command retries
 
@@ -459,21 +456,31 @@ class GPSStrikeController(Node):
         height_remaining = self.absolute_target_alt - self.current_alt
 
         # ======================================================
-        # FIX YAW FIRST
+        # ONE-TIME INITIAL YAW ALIGNMENT
         # ======================================================
-        if abs(bearing_error) > 10.0:
-            pitch_deg = 0.0
-            thrust = DEFAULT_THRUST
+        if not self.attack_started:
+            if abs(bearing_error) > 1.0:
+                # Stay level only during the initial alignment after takeoff.
+                self.send_attitude(0.0, target_bearing_deg, DEFAULT_THRUST)
+                self.get_logger().info(
+                    f"Initial yaw alignment | BearingError: {bearing_error:.2f} deg"
+                )
+                return
+
+            self.attack_started = True
+            self.get_logger().info("Initial alignment complete. Starting attack run.")
+
         # ======================================================
-        # INTERCEPT
+        # ATTACK RUN
         # ======================================================
-        else:
-            safe_distance = max(horizontal_distance, 0.01)
-            pitch_rad = math.atan2(safe_distance, height_remaining)
-            pitch_deg = math.degrees(pitch_rad)
-            if 0.0 < height_remaining < 300.0:
-                pitch_deg *= 0.2
-            thrust = DEFAULT_THRUST
+        # From this point onward yaw is corrected continuously,
+        # but pitch is NEVER gated by bearing error again.
+        safe_distance = max(horizontal_distance, 0.01)
+        pitch_rad = math.atan2(safe_distance, height_remaining)
+        pitch_deg = math.degrees(pitch_rad)
+        # if 0.0 < height_remaining < 300.0:
+        #     pitch_deg *= 0.2
+        thrust = DEFAULT_THRUST
 
         # ======================================================
         # SEND FINAL COMMAND
@@ -481,13 +488,20 @@ class GPSStrikeController(Node):
         self.send_attitude(pitch_deg, target_bearing_deg, thrust)
 
         self.get_logger().info(
-            f"Mode: {self.current_state.mode} | "
-            f"Armed: {self.current_state.armed} | "
-            f"Distance: {horizontal_distance:.2f} m | "
-            f"BearingError: {bearing_error:.2f} deg | "
-            f"Pitch: {pitch_deg:.2f} deg | "
-            f"Yaw: {target_bearing_deg:.2f} deg | "
-            f"Thrust: {thrust:.2f}"
+            f"Mode={self.current_state.mode} | "
+            f"Armed={self.current_state.armed} | "
+            f"Lat={self.current_lat:.7f} Lon={self.current_lon:.7f} | "
+            f"TargetLat={self.target_lat:.7f} TargetLon={self.target_lon:.7f} | "
+            f"HorizDist={horizontal_distance:.2f} m | "
+            f"HeightRemain={height_remaining:.2f} m | "
+            f"CurrentAlt={self.current_alt:.2f} m | "
+            f"TargetAlt={self.absolute_target_alt:.2f} m | "
+            f"CurrentYaw={self.current_yaw:.2f} deg | "
+            f"TargetYaw={target_bearing_deg:.2f} deg | "
+            f"BearingError={bearing_error:.2f} deg | "
+            f"PitchCmd={pitch_deg:.2f} deg | "
+            f"PitchRad={pitch_rad:.4f} | "
+            f"Thrust={thrust:.2f}"
         )
 
 

@@ -32,6 +32,7 @@ from gz.msgs10.image_pb2 import Image as GzImage
 # ──────────────────────────────────────────────────────────────
 PHASE_TAKEOFF       = "TAKEOFF"
 PHASE_MC_CLIMB      = "MC_CLIMB"
+PHASE_DIRECT_ATTACK = "DIRECT_ATTACK"
 PHASE_FW_TRANSITION = "FW_TRANSITION"
 PHASE_FW_CRUISE     = "FW_CRUISE"
 PHASE_TARGET_PASSED = "TARGET_PASSED"
@@ -113,6 +114,7 @@ class GPSStrikeController(Node):
 
         # ── Tunable parameters ────────────────────────────────
         self.fw_transition_threshold_m = 1000.0
+        self.direct_attack_threshold_m = 1000.0
         self.transition_duration_s = 5.0
         self.mc_climb_thrust = 0.75   
         self.fw_cruise_thrust = 0.70  
@@ -577,9 +579,28 @@ class GPSStrikeController(Node):
                 return
             else:
                 self.takeoff_complete = True
-                self.phase = PHASE_MC_CLIMB
-                self.get_logger().info("[PHASE] Takeoff complete. Switching to PHASE_MC_CLIMB.")
+                initial_distance = self._horizontal_distance()
+                if initial_distance <= self.direct_attack_threshold_m:
+                    self.phase = PHASE_DIRECT_ATTACK
+                    self.get_logger().warn(f"[PHASE] Target only {initial_distance:.1f} m away -> DIRECT_ATTACK")
+                else:
+                    self.phase = PHASE_MC_CLIMB
+                    self.get_logger().info("[PHASE] Takeoff complete. Switching to PHASE_MC_CLIMB.")
                 return 
+
+        elif self.phase == PHASE_DIRECT_ATTACK:
+            # Direct attack for nearby targets (<1000 m).
+            # Stay in multicopter mode and continuously correct yaw and pitch.
+            height_remaining = self.absolute_target_alt - self.current_alt
+            safe_dist = max(horizontal_dist, 0.01)
+            pitch_deg = math.degrees(math.atan2(safe_dist, height_remaining))
+            self.get_logger().info(
+                f"[DIRECT ATTACK] Dist={horizontal_dist:.1f} m | "
+                f"HeightRemain={height_remaining:.1f} m | "
+                f"Pitch={pitch_deg:.2f} deg"
+            )
+            self.send_attitude(0.0, pitch_deg, target_bearing, 1.0)
+            return
 
         elif self.phase == PHASE_MC_CLIMB:
             distance_from_initial = haversine(

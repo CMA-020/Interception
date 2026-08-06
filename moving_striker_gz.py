@@ -3,7 +3,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
 from gps_tracker_logger import GPSStrikeController
-# from gps_tracker_controller import GPSStrikeController
+# from gps_strike_controller_hold import GPSStrikeController
 
 # MODIFIED: Import the updated Gazebo transport-based converter class
 from target_gps_converter_gz import CubeGPSConverter
